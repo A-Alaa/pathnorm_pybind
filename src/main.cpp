@@ -1,44 +1,19 @@
 #include "pybind11/pybind11.h"
-#include "Eigen/Eigen"
+#include "pathnorm.hpp"
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 
-int add(int i, int j) {
-    return i + j;
-}
-
 namespace py = pybind11;
+constexpr auto byref = py::return_value_policy::reference_internal;
 
-PYBIND11_MODULE(cmake_example, m) {
-    m.doc() = R"pbdoc(
-        Pybind11 example plugin
-        -----------------------
+PYBIND11_MODULE(MyLib, m) {
+    m.doc() = "optional module docstring";
 
-        .. currentmodule:: cmake_example
-
-        .. autosummary::
-           :toctree: _generate
-
-           add
-           subtract
-    )pbdoc";
-
-    m.def("add", &add, R"pbdoc(
-        Add two numbers
-
-        Some other explanation about the add function.
-    )pbdoc");
-
-    m.def("subtract", [](int i, int j) { return i - j; }, R"pbdoc(
-        Subtract two numbers
-
-        Some other explanation about the subtract function.
-    )pbdoc");
-
-#ifdef VERSION_INFO
-    m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
-#else
-    m.attr("__version__") = "dev";
-#endif
+    py::class_<MyClass>(m, "MyClass")
+    .def(py::init<double, double, int>())  
+    .def("run", &MyClass::run, py::call_guard<py::gil_scoped_release>())
+    .def_readonly("v_data", &MyClass::v_data, byref)
+    .def_readonly("v_gamma", &MyClass::v_gamma, byref)
+    ;
 }
