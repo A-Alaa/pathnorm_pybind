@@ -1,13 +1,10 @@
 #include "pybind11/pybind11.h"
 #include "pathnorm.hpp"
 
-#define STRINGIFY(x) #x
-#define MACRO_STRINGIFY(x) STRINGIFY(x)
-
 namespace py = pybind11;
 constexpr auto byref = py::return_value_policy::reference_internal;
 
-PYBIND11_MODULE(MyLib, m) {
+PYBIND11_MODULE(proxmap_pathnorm, m) {
     m.doc() = "optional module docstring";
 
     py::class_<MyClass>(m, "MyClass")
