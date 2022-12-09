@@ -3,3 +3,6 @@
     url = https://github.com/pybind/pybind11.git
     branch = master
 
+[submodule "third_party/eigen"]
+	path = third_party/eigen
+	url = https://github.com/libigl/eigen.git
