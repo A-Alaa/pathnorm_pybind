@@ -1,8 +1,7 @@
-[submodule "pybind11"]
-    path = pybind11
-    url = https://github.com/pybind/pybind11.git
-    branch = master
-
 [submodule "third_party/eigen"]
 	path = third_party/eigen
 	url = https://github.com/libigl/eigen.git
+[submodule "third_party/pybind11"]
+	path = third_party/pybind11
+	url = https://github.com/pybind/pybind11.git
+	branch = v2.10.1
