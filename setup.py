@@ -124,18 +124,19 @@ class CMakeBuild(build_ext):
         )
 
 
-# The information here can also be placed in setup.cfg - better separation of
-# logic and declaration, and simpler if you include description/version in a file.
 setup(
-    name="pathnorm",
+    name="pathnorm_proxmap",
     version="0.0.1",
     author="Asem Alaa",
     author_email="asem.a.abdelaziz@gmail.com",
-    description="A test project using pybind11 and CMake",
+    url="https://github.com/A-Alaa/pathnorm_pybind",
+    description="A C++/Eigen binding for PathNorm Proximal Mapping algorithm",
     long_description="",
-    ext_modules=[CMakeExtension("cmake_example")],
+    ext_modules=[CMakeExtension("pathnorm_proxmap")],
+    extras_require={"test": "pytest>=6.0"},
+    # Currently, build_ext only provides an optional "highest supported C++
+    # level" feature, but in the future it may provide more features.
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
-    extras_require={"test": ["pytest>=6.0"]},
     python_requires=">=3.8.5",
 )

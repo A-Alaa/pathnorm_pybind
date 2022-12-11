@@ -4,7 +4,7 @@
 namespace py = pybind11;
 constexpr auto byref = py::return_value_policy::reference_internal;
 
-PYBIND11_MODULE(proxmap_pathnorm, m) {
+PYBIND11_MODULE(pathnorm_proxmap, m) {
   m.doc() = "optional module docstring";
 
   py::class_<PathNormProximalMap>(m, "PathNormProximalMap")
