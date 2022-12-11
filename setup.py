@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from setuptools import Extension, setup
+from setuptools import Extension, setup, find_packages
 from setuptools.command.build_ext import build_ext
 
 # Convert distutils Windows platform specifiers to CMake -A arguments
@@ -132,6 +132,9 @@ setup(
     url="https://github.com/A-Alaa/pathnorm_pybind",
     description="A C++/Eigen binding for PathNorm Proximal Mapping algorithm",
     long_description="",
+    package_dir={'py_pathnorm_proxmap': 'py/py_pathnorm_proxmap'},
+    packages=find_packages(where='py'),
+    install_requires=['numpy'],
     ext_modules=[CMakeExtension("pathnorm_proxmap")],
     extras_require={"test": "pytest>=6.0"},
     # Currently, build_ext only provides an optional "highest supported C++
