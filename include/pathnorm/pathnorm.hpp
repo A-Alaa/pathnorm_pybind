@@ -48,7 +48,7 @@ public:
       // 2. Order Descending-ly w.r.t. absolute vals & Cache Re-ordering
       // indices.
       auto abs = Eigen::abs(row);
-      auto sorter = _sort_indexes(abs);
+      auto sorter = _sort_indexes(-abs);
       _reorder = _sort_indexes(sorter);
 
       // 3. Take the Absolute of the ordered values.
@@ -77,9 +77,9 @@ public:
       std::vector<size_t> idx(v.size());
       std::iota(idx.begin(), idx.end(), 0);
 
-      // sort indexes based on comparing values in v in descending order.
+      // sort indexes based on comparing values in v in increasing order.
       std::sort(idx.begin(), idx.end(),
-                [&v](size_t i1, size_t i2) { return v[i1] > v[i2]; });
+                [&v](size_t i1, size_t i2) { return v[i1] < v[i2]; });
 
       return idx;
     }
@@ -106,15 +106,19 @@ private:
     return vt + wt + lambda * v.sum() * w.sum();
   }
 
-  std::pair<Row, Row> _vwStationary(size_t rowIdx, size_t sv, size_t sw) const {
+  [[nodiscard]] std::pair<Row, Row> _vwStationary(size_t rowIdx, int64_t sv,
+                                                  int64_t sw) const {
     /**
      * Compute the stationary points v^(sv, sw), w^(sv, sw) using Eq(26)
      * (Latorre et al.; 2020) for the pair (sv, sw) passed as tuple 's_vw'.
      **/
 
+    eigen_assert(sv <= _pX[rowIdx].abs().size());
+    eigen_assert(sw <= _pY[rowIdx].abs().size());
+
     double sumx = (sv > 0) ? _pX[rowIdx].cumsum()[sv - 1] : 0.0;
     double sumy = (sw > 0) ? _pY[rowIdx].cumsum()[sw - 1] : 0.0;
-    double u = 1. / (1 - sv * sw * _lambda);
+    double u = 1. / (1. - sv * sw * _lambda2);
     Row v = _pX[rowIdx].abs() + u * (_lambda2 * sw * sumx - _lambda * sumy);
     Row w = _pY[rowIdx].abs() + u * (_lambda2 * sv * sumy - _lambda * sumx);
     v(seq(sv, last)).setZero();
@@ -122,27 +126,36 @@ private:
     return {std::move(v), std::move(w)};
   }
 
-  bool _reject(size_t rowIdx, size_t sv, size_t sw, Cache &cache) const {
-    // Check if condition 1 in Lemma 18(Latorre et al.; 2020)is violated.
+  [[nodiscard]] bool _vwReject(size_t rowIdx, int64_t sv, int64_t sw) const {
+    /**
+     *  Check if condition 1 in Lemma 18(Latorre et al.; 2020) is violated.
+     **/
+
+    eigen_assert(sv <= _pX[rowIdx].abs().size());
+    eigen_assert(sw <= _pY[rowIdx].abs().size());
     if (sv * sw > 1. / _lambda2)
       return true;
-    if (cache.count({sv, sw}) == 0)
-      cache[{sv, sw}] = _vwStationary(rowIdx, sv, sw);
-    auto &[v, w] = cache.at({sv, sw});
-    double msv = (sv > 0) ? v[sv - 1] : 0.0;
-    double msw = (sw > 0) ? w[sw - 1] : 0.0;
-    return msv < 0.0 or msw < 0.0;
+
+    double sumx = (sv > 0) ? _pX[rowIdx].cumsum()[sv - 1] : 0.0;
+    double sumy = (sw > 0) ? _pY[rowIdx].cumsum()[sw - 1] : 0.0;
+    double u = 1. / (1 - sv * sw * _lambda2);
+
+    double vsv = (sv > 0) ? _pX[rowIdx].abs()[sv - 1] +
+                                u * (_lambda2 * sw * sumx - _lambda * sumy)
+                          : 0.0;
+    double wsw = (sw > 0) ? _pY[rowIdx].abs()[sw - 1] +
+                                u * (_lambda2 * sv * sumy - _lambda * sumx)
+                          : 0.0;
+    return vsv < 0.0 or wsw < 0.0;
   }
 
-  std::set<std::pair<size_t, size_t>> _sparsityPairsMFB(size_t rowIdx,
-                                                        Cache &cache) const {
-    size_t m = _mX.cols();
-    size_t p = _mY.cols();
-    int64_t sv = 0, sw = m;
-    auto pairs = std::set<std::pair<size_t, size_t>>();
+  [[nodiscard]] std::set<std::pair<int64_t, int64_t>>
+  _sparsityPairsMFB(size_t rowIdx) const {
+    int64_t sv = 0, sw = _mY.cols();
+    auto pairs = std::set<std::pair<int64_t, int64_t>>();
     bool maximal = true;
-    while (sv <= p and sw >= 0) {
-      if (_reject(rowIdx, sv, sw, cache)) {
+    while (sv <= _mX.cols() and sw >= 0) {
+      if (_vwReject(rowIdx, sv, sw)) {
         if (maximal) {
           pairs.emplace(sv - 1, sw);
           maximal = false;
@@ -153,35 +166,28 @@ private:
         maximal = true;
       }
     }
-    if (sv == p + 1)
+    if (sv == _mX.cols() + 1)
       pairs.emplace(sv - 1, sw);
     return pairs;
   }
 
-  std::pair<Row, Row> _vecProximalMap(size_t rowIdx) const {
+  [[nodiscard]] std::pair<Row, Row> _vecProximalMap(size_t rowIdx) const {
     auto &ppX = _pX[rowIdx];
     auto &ppY = _pY[rowIdx];
 
     double optVal = std::numeric_limits<double>::infinity();
-    Cache vWCache;
-    auto optIterator = vWCache.end();
+    std::pair<Row, Row> optPts;
 
-    for (auto &svw : _sparsityPairsMFB(rowIdx, vWCache)) {
-      auto search = vWCache.find(svw);
-      if (search == vWCache.end())
-        std::tie(search, std::ignore) =
-            vWCache.insert({svw, _vwStationary(rowIdx, svw.first, svw.second)});
-      const Row &v = search->second.first;
-      const Row &w = search->second.second;
+    for (auto [sv, sw] : _sparsityPairsMFB(rowIdx)) {
+      auto [v, w] = _vwStationary(rowIdx, sv, sw);
       double val = _proxObj(ppX.abs(), ppY.abs(), v, w, _lambda);
       if (val < optVal) {
         optVal = val;
-        optIterator = search;
+        optPts = {std::move(v), std::move(w)};
       }
     }
 
-    Row &v = optIterator->second.first;
-    Row &w = optIterator->second.second;
+    auto &[v, w] = optPts;
 
     if (_proxObj(ppX.abs(), ppY.abs(), _v0, w, _lambda) < optVal)
       return {_v0, std::move(w)};

@@ -6,6 +6,9 @@ import numpy as np
 
 
 class PathNormProximalMapping:
+    @staticmethod
+    def zeros_like(*args, **kwargs):
+        return np.zeros_like(*args, **kwargs)
 
     @staticmethod
     def prox_obj(a_xy, vw, lam):
@@ -50,6 +53,13 @@ class PathNormProximalMapping:
         return a, c_a, sign, recover
 
     @staticmethod
+    def postprocess_prox_params(VW, sign, recover):
+        V, W = np.vstack(VW[0]), np.vstack(VW[1])
+        V = np.take_along_axis(V, recover[0], axis=1)
+        W = np.take_along_axis(W, recover[1], axis=1)
+        return (V * sign[0], W * sign[1])
+
+    @staticmethod
     def vw_stationary(a_xy, ca_xy, s_vw, lambd):
         """
         Compute the stationary points v^(sv, sw), w^(sv, sw) using Eq(26)
@@ -66,58 +76,60 @@ class PathNormProximalMapping:
 
         ax, ay = a_xy
         sv, sw = s_vw
+        la = lambd
+        la2 = lambd ** 2
+        sumx = ca_xy[0][sv - 1] if sv > 0 else 0
+        sumy = ca_xy[1][sw - 1] if sw > 0 else 0
+        u = 1. / (1 - sv * sw * la2)
 
-        ca_x = ca_xy[0][sv - 1] if sv > 0 else 0
-        ca_y = ca_xy[1][sw - 1] if sw > 0 else 0
-        u = 1. / (1 - sv * sw * lambd ** 2)
-
-        v = ax + u * (lambd ** 2 * sw * ca_x - lambd * ca_y)
-        w = ay + u * (lambd ** 2 * sv * ca_y - lambd * ca_x)
+        v = ax + u * (la2 * sw * sumx - la * sumy)
+        w = ay + u * (la2 * sv * sumy - la * sumx)
 
         # v[k], w[k] = 0 for
-        v = v.at[sv:].set(0)
-        w = w.at[sw:].set(0)
+        v[sv:] = 0
+        w[sw:] = 0
         return v, w
 
     @classmethod
-    def postprocess_prox_params(cls, VW, sign, recover):
-        V, W = np.vstack(VW[0]), np.vstack(VW[1])
-        V = np.take_along_axis(V, recover[0], axis=1)
-        W = np.take_along_axis(W, recover[1], axis=1)
-        return (V * sign[0], W * sign[1])
-
-    @classmethod
-    def reject(cls, a_xy, ca_xy, s_vw, lambd, cache):
+    def reject(cls, a_xy, ca_xy, s_vw, lambd):
         """
-        Check if condition 1 in Lemma 18 (Latorre et al.; 2020) is violated.
+        Check where conditions 1 & 2 in Lemma 18 (Latorre et al.; 2020) are violated.
         """
-
-        if s_vw[0] * s_vw[1] > lambd ** -2:
+        la = lambd
+        la2 = lambd ** 2
+        if s_vw[0] * s_vw[1] > 1. / la2:
+            # Condition 1 is violated.
             return True
+        ax, ay = a_xy
+        sv, sw = s_vw
 
-        if s_vw not in cache:
-            cache[s_vw] = cls.vw_stationary(a_xy, ca_xy, s_vw, lambd)
-        v, w = cache[s_vw]
+        sumx = ca_xy[0][sv - 1] if sv > 0 else 0
+        sumy = ca_xy[1][sw - 1] if sw > 0 else 0
+        u = 1. / (1 - sv * sw * la2)
+
         # Beware that -ve idx k in NumPy will return the kth element from
         # the end, what we want here is to return zero instead at -ve idx!
         sv, sw = s_vw
-        v_sv = v[sv - 1] if sv > 0 else 0
-        w_sw = w[sw - 1] if sw > 0 else 0
 
+        v_sv = (ax[sv - 1] + u * (la2 * sw * sumx - la * sumy)) if sv > 0 else 0
+        w_sw = (ay[sw - 1] + u * (la2 * sv * sumy - la * sumx)) if sw > 0 else 0
+
+        # Condition 2 is violated.
         return v_sv < 0 or w_sw < 0
 
     @classmethod
-    def sparsity_pairs_MFB(cls, a_xy, ca_xy, lambd, c):
+    def sparsity_pairs_mfb(cls, a_xy, ca_xy, lambd):
         """
-        Find sparsity pairs, Algorithm 5 (Latorre et al.; 2020).
+        Find sparsity pairs on the maximal feasibility boundary, Algorithm 5 (Latorre et al.; 2020).
         """
         m = len(a_xy[1])
         p = len(a_xy[0])
-        sv, sw = 0, m
+        sv = 0
+        sw = m
         s = set()
         maximal = True
         while sv <= p and sw >= 0:
-            if cls.reject(a_xy, ca_xy, (sv, sw), lambd, c):
+            if cls.reject(a_xy, ca_xy, (sv, sw), lambd):
                 if maximal:
                     s.add((sv - 1, sw))
                     maximal = False
@@ -136,25 +148,19 @@ class PathNormProximalMapping:
         """
         # Sparsity
         hopt = np.inf
-        # Caching v, w
-        vw_c = dict()
 
-        for s_vw in cls.sparsity_pairs_MFB(a_xy, ca_xy, lam, vw_c):
-            if s_vw not in vw_c:
-                vw = cls.vw_stationary(a_xy, ca_xy, s_vw, lam)
-            else:
-                vw = vw_c[s_vw]
-
+        for s_vw in cls.sparsity_pairs_mfb(a_xy, ca_xy, lam):
+            vw = cls.vw_stationary(a_xy, ca_xy, s_vw, lam)
             h = cls.prox_obj(a_xy, vw, lam)
             if h < hopt:
                 hopt = h
                 vw_sol = vw
 
-        probe_v = (np.zeros_like(a_xy[0]), a_xy[1])
+        probe_v = (cls.zeros_like(a_xy[0]), a_xy[1])
         if cls.prox_obj(a_xy, probe_v, lam) < hopt:
             vw_sol = probe_v
 
-        probe_w = (a_xy[0], np.zeros_like(a_xy[1]))
+        probe_w = (a_xy[0], cls.zeros_like(a_xy[1]))
         if cls.prox_obj(a_xy, probe_w, lam) < hopt:
             vw_sol = probe_w
 
