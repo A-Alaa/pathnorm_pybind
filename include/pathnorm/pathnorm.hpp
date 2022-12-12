@@ -48,7 +48,7 @@ public:
       // 2. Order Descending-ly w.r.t. absolute vals & Cache Re-ordering
       // indices.
       auto abs = Eigen::abs(row);
-      auto sorter = _sort_indexes(-abs);
+      auto sorter = _sort_indexes(abs);
       _reorder = _sort_indexes(sorter);
 
       // 3. Take the Absolute of the ordered values.
@@ -77,12 +77,9 @@ public:
       std::vector<size_t> idx(v.size());
       std::iota(idx.begin(), idx.end(), 0);
 
-      // sort indexes based on comparing values in v
-      // using std::stable_sort instead of std::sort
-      // to avoid unnecessary index re-orderings
-      // when v contains elements of equal values
+      // sort indexes based on comparing values in v in descending order.
       std::sort(idx.begin(), idx.end(),
-                [&v](size_t i1, size_t i2) { return v[i1] < v[i2]; });
+                [&v](size_t i1, size_t i2) { return v[i1] > v[i2]; });
 
       return idx;
     }
