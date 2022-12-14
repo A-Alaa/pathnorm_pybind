@@ -9,4 +9,3 @@ target_link_libraries(pathnorm_proxmap PRIVATE pybind11::module pybind11::lto py
 target_include_directories(pathnorm_proxmap PRIVATE
         "${CMAKE_SOURCE_DIR}/include"
         "${CMAKE_SOURCE_DIR}/third_party/eigen")
-

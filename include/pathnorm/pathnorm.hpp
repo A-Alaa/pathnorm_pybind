@@ -85,16 +85,6 @@ public:
     }
   };
 
-private:
-  const Array2D _mX;
-  const Array2D _mY;
-  const Row _v0;
-  const Row _w0;
-  const std::vector<ProcessRow> _pX;
-  const std::vector<ProcessRow> _pY;
-  const double _lambda;
-  const double _lambda2;
-
   static double _proxObj(const Row &absx, const Row &absy, const Row &v,
                          const Row &w, double lambda) {
     /*
@@ -206,12 +196,9 @@ private:
   }
 
 public:
-  Array2D mV;
-  Array2D mW;
-
   PathNormProximalMap() = delete;
 
-  PathNormProximalMap(Array2D inX, Array2D inY, double in_lambda)
+  PathNormProximalMap(const Array2D inX, const Array2D inY, double in_lambda)
       : _mX(inX), _mY(inY), _lambda(in_lambda), _lambda2(pow(in_lambda, 2)),
         _pX(_preprocessRows(inX)), _pY(_preprocessRows(inY)),
         _v0(Row::Zero(inX.cols())), _w0(Row::Zero(inY.cols())) {
@@ -227,4 +214,23 @@ public:
       mW.row(i) = _pY[i].postprocessRow(w);
     }
   }
+
+public:
+  // Output arrays
+  Array2D mV;
+  Array2D mW;
+
+private:
+  // Inputs
+  const Array2D _mX;
+  const Array2D _mY;
+  const double _lambda;
+  const double _lambda2;
+
+  // Allocated zeros.
+  const Row _v0;
+  const Row _w0;
+  // Preprocessing
+  const std::vector<ProcessRow> _pX;
+  const std::vector<ProcessRow> _pY;
 };
